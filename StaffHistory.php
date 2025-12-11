@@ -9,7 +9,6 @@ if (!isset($_SESSION['fullname'])) {
 $current_user = $_SESSION['fullname']; 
 
 require_once 'db_connect.php';
-$conn = new mysqli($servername, $username, $password, $dbname);
 $conn->set_charset("utf8"); // สำคัญ: แก้ภาษาต่างดาว
 
 if ($conn->connect_error) { die("Connection failed: " . $conn->connect_error); }
