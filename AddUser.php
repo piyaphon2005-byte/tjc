@@ -5,7 +5,7 @@ require_once 'auth.php';
 
 // 2. เชื่อมต่อฐานข้อมูล
 require_once 'db_connect.php';
-$conn = new mysqli($servername, $username, $password, $dbname);
+$conn = new mysqli($servername, $username, $password, $dbname, $port);
 $conn->set_charset("utf8");
 
 $message = "";
