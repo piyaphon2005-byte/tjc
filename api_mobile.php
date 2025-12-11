@@ -358,42 +358,76 @@ else if ($action == 'get_map_data') {
 }
 
 // ==========================================
-// 7. UPDATE PROFILE (อัปเดตรูปโปรไฟล์) ✅ เพิ่มใหม่
+// 7. UPDATE PROFILE (อัปเดตรูปโปรไฟล์ - แบบตรวจสอบละเอียด)
 // ==========================================
 else if ($action == 'update_profile') {
-    $username = $_POST['username'];
     
-    // ฟังก์ชันอัปโหลดรูป
-    function uploadProfileImg($fileKey) {
-        if (isset($_FILES[$fileKey]) && $_FILES[$fileKey]['error'] == 0) {
-            $target_dir = "uploads/profiles/"; // สร้างโฟลเดอร์นี้ด้วยนะครับ
-            if (!file_exists($target_dir)) { mkdir($target_dir, 0777, true); } 
-            
-            $filename = "user_" . time() . "_" . rand(100,999) . ".jpg";
-            $target = $target_dir . $filename;
-            
-            if (move_uploaded_file($_FILES[$fileKey]['tmp_name'], $target)) {
-                return $filename;
-            }
-        }
-        return null;
+    // 1. รับค่า Username (ตัวระบุว่าจะอัปเดตใคร)
+    $username = isset($_POST['username']) ? $_POST['username'] : '';
+
+    if (empty($username)) {
+        echo json_encode(["status" => "error", "message" => "ไม่พบชื่อผู้ใช้ (Username is empty)"]);
+        exit();
     }
 
-    $avatar = uploadProfileImg('avatar');
+    // 2. ตรวจสอบว่ามีการส่งไฟล์มาชื่อ 'avatar' หรือไม่
+    if (!isset($_FILES['avatar'])) {
+        echo json_encode(["status" => "error", "message" => "ไม่พบไฟล์รูปภาพ (กรุณาเช็คว่าแอปส่ง key ชื่อ 'avatar' มาหรือไม่)"]);
+        exit();
+    }
 
-    if ($avatar) {
-        // ถ้ามีการส่งรูปมา ให้อัปเดต
-        $sql = "UPDATE users SET avatar = ? WHERE username = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ss", $avatar, $username);
-        
-        if ($stmt->execute()) {
-            echo json_encode(["status" => "success", "message" => "อัปเดตข้อมูลสำเร็จ", "avatar" => $avatar]);
-        } else {
-            echo json_encode(["status" => "error", "message" => "อัปเดตฐานข้อมูลไม่สำเร็จ"]);
+    $file = $_FILES['avatar'];
+
+    // 3. ตรวจสอบ Error จากการอัปโหลดของ PHP
+    if ($file['error'] !== 0) {
+        echo json_encode(["status" => "error", "message" => "Upload Error Code: " . $file['error']]);
+        exit();
+    }
+
+    // 4. จัดการโฟลเดอร์
+    $target_dir = "uploads/profiles/";
+    if (!file_exists($target_dir)) {
+        // พยายามสร้างโฟลเดอร์ ถ้าสร้างไม่ได้ให้แจ้งเตือน
+        if (!mkdir($target_dir, 0777, true)) {
+            echo json_encode(["status" => "error", "message" => "ไม่สามารถสร้างโฟลเดอร์ uploads/profiles/ ได้ (Permission Denied)"]);
+            exit();
         }
+    }
+
+    // 5. ย้ายไฟล์
+    $filename = "user_" . time() . "_" . rand(100,999) . ".jpg";
+    $target_path = $target_dir . $filename;
+
+    if (move_uploaded_file($file['tmp_name'], $target_path)) {
+        
+        // 6. อัปเดตลงฐานข้อมูล
+        $sql = "UPDATE users SET avatar = ? WHERE username = ?";
+        
+        if ($stmt = $conn->prepare($sql)) {
+            $stmt->bind_param("ss", $filename, $username);
+            
+            if ($stmt->execute()) {
+                // เช็คว่ามีแถวถูกกระทบจริงไหม (ถ้า username ไม่ตรงกับใครเลย rows_affected จะเป็น 0)
+                if ($stmt->affected_rows > 0) {
+                    echo json_encode([
+                        "status" => "success", 
+                        "message" => "อัปเดตรูปโปรไฟล์สำเร็จ", 
+                        "avatar" => $filename,
+                        "url" => $filename // ส่งชื่อไฟล์กลับไปให้แอปแสดงผล
+                    ]);
+                } else {
+                    echo json_encode(["status" => "warning", "message" => "อัปโหลดรูปแล้ว แต่ไม่พบ Username นี้ในระบบ หรือ รูปซ้ำกับของเดิม"]);
+                }
+            } else {
+                echo json_encode(["status" => "error", "message" => "SQL Error: " . $stmt->error]);
+            }
+            $stmt->close();
+        } else {
+            echo json_encode(["status" => "error", "message" => "Prepare Failed: " . $conn->error]);
+        }
+
     } else {
-        echo json_encode(["status" => "error", "message" => "ไม่อนุญาตให้อัปโหลดรูปภาพ"]);
+        echo json_encode(["status" => "error", "message" => "ย้ายไฟล์ไม่สำเร็จ (Check Folder Permissions)"]);
     }
 }
 
