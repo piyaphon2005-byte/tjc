@@ -5,12 +5,30 @@ header("Access-Control-Allow-Methods: POST, GET");
 header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 
 // ตั้งค่าฐานข้อมูล
-$servername = "127.0.0.1";
-$username = "root"; 
-$password = "";
+$servername = "gateway01.ap-southeast-1.prod.aws.tidbcloud.com";
+$username = "2zJFS48pitnR2QG.root"; 
+$password = "DF43GROp1tGLs8Gp"; // <<< รหัสผ่านจริงของคุณ
 $dbname = "tjc_db";
+$port = 4000; // Port สำหรับ TiDB
 
-$conn = new mysqli($servername, $username, $password, $dbname);
+// 1. สร้างการเชื่อมต่อและเปิดใช้งาน SSL/TLS
+$conn = mysqli_init();
+if (!$conn) {
+    echo json_encode(["status" => "error", "message" => "Connection failed: mysqli_init() error"]);
+    exit();
+}
+
+// 2. ตั้งค่าไม่ตรวจสอบใบรับรอง (ใช้เลข 25 แทน)
+mysqli_options($conn, 25, false);
+// 3. เชื่อมต่อโดยบังคับใช้ SSL/TLS
+mysqli_real_connect($conn, $servername, $username, $password, $dbname, $port, NULL, MYSQLI_CLIENT_SSL);
+
+// เช็คว่าเชื่อมต่อล้มเหลวหรือไม่
+if (mysqli_connect_errno()) {
+    echo json_encode(["status" => "error", "message" => "Connection failed: " . mysqli_connect_error()]);
+    exit();
+}
+
 $conn->set_charset("utf8");
 
 if ($conn->connect_error) {
