@@ -1,12 +1,13 @@
 <?php
 // db_connect.php
-$servername = "localhost";
-$username = "root"; // XAMPP ปกติ user คือ root
-$password = "";     // XAMPP ปกติ password จะว่างไว้
-$dbname = "tjc_db"; // ชื่อฐานข้อมูลที่เราเพิ่งสร้าง
+$servername = "gateway01.ap-southeast-1.prod.aws.tidbcloud.com";
+$username = "2zJFS48pitnR2QG.root"; 
+$password = "vSreP8xciwOBfPf6"; // <<< เปลี่ยนตรงนี้เป็นรหัสผ่านจริง
+$dbname = "tjc_db"; 
+$port = 4000; // Port สำหรับ TiDB
 
-// สร้างการเชื่อมต่อ
-$conn = new mysqli($servername, $username, $password, $dbname);
+// สร้างการเชื่อมต่อ (ต้องใส่ $port เป็นตัวที่ 5)
+$conn = new mysqli($servername, $username, $password, $dbname, $port);
 
 // เช็คว่าเชื่อมได้ไหม
 if ($conn->connect_error) {

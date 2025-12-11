@@ -6,7 +6,7 @@ RUN docker-php-ext-install mysqli pdo pdo_mysql
 
 # เปิดใช้งาน Mod Rewrite ของ Apache (เผื่อใช้ .htaccess)
 RUN a2enmod rewrite
-
+    
 # ก๊อปปี้ไฟล์โค้ดทั้งหมดของคุณในโฟลเดอร์ปัจจุบัน ไปใส่ในโฟลเดอร์เว็บของ Server
 COPY . /var/www/html/
 
