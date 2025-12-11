@@ -8,11 +8,7 @@ $conn = new mysqli($servername, $username, $password, $dbname);
 
 $conn->set_charset("utf8");
 
-
-
 $action = isset($_GET['action']) ? $_GET['action'] : '';
-
-
 
 // 1. ดึงจังหวัด (ตามภาค)
 
