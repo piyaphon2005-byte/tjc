@@ -164,32 +164,49 @@ else if ($action == 'get_dashboard_stats') {
 }
 
 // ==========================================
-// 4. SUBMIT REPORT (บันทึกรายงาน)
+// 4. SUBMIT REPORT (บันทึกรายงาน - แก้ไขแบบปลอดภัย)
 // ==========================================
 else if ($action == 'submit_report') {
     
-    $report_date = $_POST['report_date'];
-    $reporter_name = $_POST['reporter_name'];
-    $work_type = $_POST['work_type'];
+    // 1. รับค่าแบบ Safe Mode (ถ้าแอปไม่ส่งมา ให้ใส่ค่าว่างแทน)
+    $report_date = isset($_POST['report_date']) ? $_POST['report_date'] : date('Y-m-d H:i:s');
+    $reporter_name = isset($_POST['reporter_name']) ? $_POST['reporter_name'] : '';
+    $work_type = isset($_POST['work_type']) ? $_POST['work_type'] : '';
     
     if ($work_type == 'company') {
         $area = "เข้าบริษัท (สำนักงาน)"; $province = "กรุงเทพมหานคร"; 
         $gps = "Office"; $gps_address = "สำนักงานใหญ่";
     } else {
-        $area = $_POST['area_zone']; $province = $_POST['province']; $gps = $_POST['gps']; $gps_address = $_POST['gps_address'];
+        $area = isset($_POST['area_zone']) ? $_POST['area_zone'] : ''; 
+        $province = isset($_POST['province']) ? $_POST['province'] : ''; 
+        $gps = isset($_POST['gps']) ? $_POST['gps'] : ''; 
+        $gps_address = isset($_POST['gps_address']) ? $_POST['gps_address'] : '';
     }
 
-    $work_result = $_POST['work_result']; 
+    $work_result = isset($_POST['work_result']) ? $_POST['work_result'] : ''; 
     $customer_type = isset($_POST['customer_type']) ? $_POST['customer_type'] : 'ลูกค้าเก่า';
     $project_name = isset($_POST['project_name']) ? $_POST['project_name'] : ''; 
     $additional_notes = isset($_POST['additional_notes']) ? $_POST['additional_notes'] : '';
     
-    $job_status = $_POST['job_status'];
-    $next_appointment = !empty($_POST['next_appointment']) ? $_POST['next_appointment'] : NULL;
-    $activity_type = $_POST['activity_type'];
+    $job_status = isset($_POST['job_status']) ? $_POST['job_status'] : '';
+    // ถ้า next_appointment ส่งมาว่างๆ ให้เป็น NULL
+    $next_appointment = (!empty($_POST['next_appointment']) && $_POST['next_appointment'] != 'null') ? $_POST['next_appointment'] : NULL;
+    
+    $activity_type = isset($_POST['activity_type']) ? $_POST['activity_type'] : '';
     $activity_detail = isset($_POST['activity_detail']) ? $_POST['activity_detail'] : '';
 
-    // อัปโหลดรูป
+    // รับค่าตัวเลข (กัน Error)
+    $fuel = isset($_POST['fuel_cost']) ? floatval($_POST['fuel_cost']) : 0.00;
+    $acc = isset($_POST['accommodation_cost']) ? floatval($_POST['accommodation_cost']) : 0.00;
+    $other = isset($_POST['other_cost']) ? floatval($_POST['other_cost']) : 0.00;
+    $total = $fuel + $acc + $other;
+    
+    // รับค่าข้อความส่วนท้าย (ตัวปัญหาที่มักทำให้ Error)
+    $other_cost_detail = isset($_POST['other_cost_detail']) ? $_POST['other_cost_detail'] : '';
+    $problem = isset($_POST['problem']) ? $_POST['problem'] : '';
+    $suggestion = isset($_POST['suggestion']) ? $_POST['suggestion'] : '';
+
+    // ฟังก์ชันอัปโหลดรูป
     function uploadImg($fileKey) {
         if (isset($_FILES[$fileKey]) && $_FILES[$fileKey]['error'] == 0) {
             $target_dir = "uploads/";
@@ -206,11 +223,6 @@ else if ($action == 'submit_report') {
     $acc_receipt = uploadImg('acc_image');
     $other_receipt = uploadImg('other_image');
 
-    $fuel = floatval($_POST['fuel_cost']);
-    $acc = floatval($_POST['accommodation_cost']);
-    $other = floatval($_POST['other_cost']);
-    $total = $fuel + $acc + $other;
-
     // SQL Insert
     $sql = "INSERT INTO reports (
         report_date, reporter_name, area, province, gps, gps_address, 
@@ -220,21 +232,27 @@ else if ($action == 'submit_report') {
         problem, suggestion
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    $stmt = $conn->prepare($sql);
-    
-    // Bind Params (24 ตัว: s = string, d = double/float)
-    $stmt->bind_param("ssssssssssssssdsdsdssdss", 
-        $report_date, $reporter_name, $area, $province, $gps, $gps_address, 
-        $work_result, $customer_type, $project_name, $additional_notes, $job_status, $next_appointment, $activity_type, $activity_detail,
-        $fuel, $fuel_receipt, $acc, $acc_receipt, 
-        $other, $other_receipt, $_POST['other_cost_detail'], $total, 
-        $_POST['problem'], $_POST['suggestion']
-    );
+    // เช็คว่า Prepare ผ่านไหม
+    if ($stmt = $conn->prepare($sql)) {
+        // Bind Params (24 ตัว)
+        // สังเกตว่าผมเอาตัวแปรที่รับค่ามาใส่แทน $_POST ตรงๆ เพื่อความชัวร์
+        $stmt->bind_param("ssssssssssssssdsdsdssdss", 
+            $report_date, $reporter_name, $area, $province, $gps, $gps_address, 
+            $work_result, $customer_type, $project_name, $additional_notes, $job_status, $next_appointment, $activity_type, $activity_detail,
+            $fuel, $fuel_receipt, $acc, $acc_receipt, 
+            $other, $other_receipt, $other_cost_detail, $total, 
+            $problem, $suggestion
+        );
 
-    if ($stmt->execute()) {
-        echo json_encode(["status" => "success", "message" => "บันทึกข้อมูลเรียบร้อย"]);
+        if ($stmt->execute()) {
+            echo json_encode(["status" => "success", "message" => "บันทึกข้อมูลเรียบร้อย"]);
+        } else {
+            // ส่ง Error ของ SQL กลับไปดูด้วย (เช่น Data too long)
+            echo json_encode(["status" => "error", "message" => "Execute Failed: " . $stmt->error]);
+        }
+        $stmt->close();
     } else {
-        echo json_encode(["status" => "error", "message" => "SQL Error: " . $stmt->error]);
+        echo json_encode(["status" => "error", "message" => "Prepare Failed: " . $conn->error]);
     }
 }
 
