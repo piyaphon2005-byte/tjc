@@ -101,55 +101,64 @@ else if ($action == 'get_users') {
 }
 
 // ==========================================
-// 3. GET DASHBOARD STATS (Dynamic Status Version)
+// 3. GET DASHBOARD STATS (Dynamic Status Version) - ✅ แก้ไข
 // ==========================================
 else if ($action == 'get_dashboard_stats') {
     
-    // รับค่าตัวกรอง
+    // รับค่าตัวกรอง (เช็ค isset เพื่อกัน Error)
     $filter_name = isset($_GET['filter_name']) ? $_GET['filter_name'] : '';
     $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : '';
     $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : '';
 
     // เงื่อนไขพื้นฐาน
     $where = "WHERE 1=1";
-    if (!empty($filter_name)) { $where .= " AND reporter_name = '$filter_name'"; }
     
-    // ใช้ DATE() เพื่อความแม่นยำในการกรองวัน
-    if (!empty($start_date)) { $where .= " AND DATE(report_date) >= '$start_date'"; }
-    if (!empty($end_date)) { $where .= " AND DATE(report_date) <= '$end_date'"; }
+    // กรองชื่อ (เฉพาะถ้ามีค่าส่งมา และไม่ใช่ค่าว่าง)
+    if (!empty($filter_name) && $filter_name != 'undefined') { 
+        $where .= " AND reporter_name = '$filter_name'"; 
+    }
+    
+    // กรองวันที่
+    if (!empty($start_date) && $start_date != 'undefined') { $where .= " AND DATE(report_date) >= '$start_date'"; }
+    if (!empty($end_date) && $end_date != 'undefined') { $where .= " AND DATE(report_date) <= '$end_date'"; }
 
-    // 1. หาภาพรวม (Total Count + Total Expense)
+    // 1. หาภาพรวม
     $sql_summary = "SELECT COUNT(*) as total, SUM(total_expense) as expense FROM reports $where";
     $res_summary = $conn->query($sql_summary);
     $summary = $res_summary->fetch_assoc();
 
-    // 2. หาจำนวนแยกตามสถานะ (Dynamic Grouping) ✅ หัวใจสำคัญ
-    // คำสั่งนี้จะดึงทุกสถานะที่มีอยู่ใน Database ออกมาพร้อมจำนวน
+    // 2. หาจำนวนแยกตามสถานะ (แก้ไขให้รองรับกรณีไม่มีข้อมูล)
     $sql_group = "SELECT job_status, COUNT(*) as count FROM reports $where GROUP BY job_status";
     $res_group = $conn->query($sql_group);
     
     $breakdown = [];
-    while($row = $res_group->fetch_assoc()) {
-        $breakdown[] = [
-            'status' => $row['job_status'], // ชื่อสถานะ เช่น 'รออนุมัติ'
-            'count' => $row['count']        // จำนวน
-        ];
+    if ($res_group) {
+        while($row = $res_group->fetch_assoc()) {
+            // ถ้า job_status ใน db เป็นค่าว่าง ให้ตั้งชื่อว่า "ไม่ระบุ"
+            $status_name = !empty($row['job_status']) ? $row['job_status'] : 'ไม่ระบุสถานะ';
+            $breakdown[] = [
+                'status' => $status_name,
+                'count' => intval($row['count'])
+            ];
+        }
     }
     
     // 3. ดึงรายการล่าสุด
-    $sql_recent = "SELECT * FROM reports $where ORDER BY report_date DESC, id DESC LIMIT 50";
+    $sql_recent = "SELECT * FROM reports $where ORDER BY report_date DESC, id DESC LIMIT 20";
     $res_recent = $conn->query($sql_recent);
     $recent = [];
-    while($row = $res_recent->fetch_assoc()) {
-        $recent[] = $row;
+    if ($res_recent) {
+        while($row = $res_recent->fetch_assoc()) {
+            $recent[] = $row;
+        }
     }
 
     echo json_encode([
         "summary" => [
-            "total" => $summary['total'] ?? 0,
-            "expense" => $summary['expense'] ?? 0    
+            "total" => $summary['total'] ? intval($summary['total']) : 0,
+            "expense" => $summary['expense'] ? floatval($summary['expense']) : 0    
         ],
-        "breakdown" => $breakdown, // ส่งรายการสถานะแบบ Dynamic กลับไป
+        "breakdown" => $breakdown, 
         "recent" => $recent
     ]);
 }
