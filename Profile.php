@@ -6,16 +6,28 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+// เปิด Error Reporting เพื่อดูปัญหา (ถ้ามี)
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 $user_id = $_SESSION['user_id'];
-$fullname = $_SESSION['fullname'];
-$role = $_SESSION['role'];
+$role = $_SESSION['role']; // ใช้ role จาก session
 
-// 2. เชื่อมต่อฐานข้อมูล
-require_once 'db_connect.php';
-// ไม่ต้องสร้าง new mysqli ใหม่ซ้ำซ้อน เพราะใน db_connect.php น่าจะมีตัวแปร $conn อยู่แล้ว
-// แต่ถ้าใน db_connect.php ไม่ได้สร้าง $conn ไว้ ให้ใช้บรรทัดข้างล่างนี้ (ถ้า Error ให้ลบ comment ออก)
-// $conn = new mysqli($servername, $username, $password, $dbname);
+// ============================================
+// 2. เชื่อมต่อฐานข้อมูล (แบบ TiDB Cloud SSL) ✅ แก้ไขใหม่
+// ============================================
+$servername = "gateway01.ap-southeast-1.prod.aws.tidbcloud.com";
+$username_db = "2zJFS48pitnR2QG.root"; 
+$password_db = "DF43GROp1tGLs8Gp"; 
+$dbname = "tjc_db";
+$port = 4000;
 
+$conn = mysqli_init();
+mysqli_options($conn, 25, false); // MYSQLI_OPT_SSL_VERIFY_SERVER_CERT
+// เชื่อมต่อ
+if (!mysqli_real_connect($conn, $servername, $username_db, $password_db, $dbname, $port, NULL, MYSQLI_CLIENT_SSL)) {
+    die("Connection failed: " . mysqli_connect_error());
+}
 $conn->set_charset("utf8");
 
 $message = "";
@@ -24,6 +36,7 @@ $message = "";
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['profile_img'])) {
     $file = $_FILES['profile_img'];
     
+    // เช็ค Error จากการอัปโหลด
     if ($file['error'] == 0) {
         $allowed = ['jpg', 'jpeg', 'png', 'gif'];
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
@@ -31,7 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['profile_img'])) {
         if (in_array($ext, $allowed)) {
             // สร้างโฟลเดอร์เก็บรูปถ้ายังไม่มี
             $target_dir = "uploads/profiles/";
-            if (!file_exists($target_dir)) { mkdir($target_dir, 0777, true); }
+            if (!file_exists($target_dir)) { 
+                mkdir($target_dir, 0777, true); 
+            }
             
             // ตั้งชื่อไฟล์ใหม่กันซ้ำ (user_id_timestamp.jpg)
             $new_name = "user_" . $user_id . "_" . time() . "." . $ext;
@@ -44,29 +59,46 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['profile_img'])) {
                 $stmt->bind_param("si", $new_name, $user_id);
                 
                 if ($stmt->execute()) {
-                    // ✅ จุดที่ถูกต้อง: อัปเดต Session ทันทีที่บันทึกสำเร็จ
+                    // ✅ อัปเดต Session ให้แสดงผลรูปใหม่ทันที
                     $_SESSION['avatar'] = $new_name; 
-                    
                     $message = "<div class='alert success'>✅ อัปเดตโปรไฟล์เรียบร้อยแล้ว!</div>";
+                    
+                    // บังคับ Refresh หน้าเว็บเพื่อเคลียร์ Cache รูปเก่า
+                    echo "<meta http-equiv='refresh' content='1'>"; 
                 } else {
-                    $message = "<div class='alert error'>❌ บันทึกฐานข้อมูลล้มเหลว</div>";
+                    $message = "<div class='alert error'>❌ บันทึกฐานข้อมูลล้มเหลว: " . $stmt->error . "</div>";
                 }
+                $stmt->close();
             } else {
-                $message = "<div class='alert error'>❌ อัปโหลดไฟล์ไม่สำเร็จ</div>";
+                $message = "<div class='alert error'>❌ ย้ายไฟล์ไม่สำเร็จ (ตรวจสอบ Permission โฟลเดอร์ uploads)</div>";
             }
         } else {
             $message = "<div class='alert error'>⚠️ อนุญาตเฉพาะไฟล์ JPG, PNG, GIF เท่านั้น</div>";
+        }
+    } else {
+        // กรณีไม่ได้เลือกไฟล์ หรือไฟล์มีปัญหา
+        if ($file['error'] != 4) { // error 4 คือไม่ได้เลือกไฟล์ (ไม่ต้องแจ้งเตือน)
+            $message = "<div class='alert error'>❌ เกิดข้อผิดพลาดในการอัปโหลด (Code: " . $file['error'] . ")</div>";
         }
     }
 }
 
 // 4. ดึงข้อมูลล่าสุดของผู้ใช้มาแสดง
-$sql_user = "SELECT * FROM users WHERE id = $user_id";
-$result_user = $conn->query($sql_user);
+$sql_user = "SELECT * FROM users WHERE id = ?";
+$stmt = $conn->prepare($sql_user);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result_user = $stmt->get_result();
 $user_data = $result_user->fetch_assoc();
 
 // หารูปโปรไฟล์ (ถ้าไม่มีใช้รูป Default)
-$avatar_url = !empty($user_data['avatar']) ? "uploads/profiles/" . $user_data['avatar'] : "https://via.placeholder.com/150?text=USER";
+// ใช้ time() ต่อท้ายเพื่อป้องกัน Browser จำรูปเก่า (Cache)
+$avatar_path = "uploads/profiles/" . $user_data['avatar'];
+if (!empty($user_data['avatar']) && file_exists($avatar_path)) {
+    $avatar_url = $avatar_path . "?t=" . time(); 
+} else {
+    $avatar_url = "https://via.placeholder.com/150?text=USER";
+}
 
 ?>
 
@@ -92,13 +124,11 @@ $avatar_url = !empty($user_data['avatar']) ? "uploads/profiles/" . $user_data['a
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
             text-align: center;
             position: relative;
-            /* เพิ่มระยะห่างสำหรับ Sidebar ในมือถือ */
             margin-top: 60px; 
         }
         
-        /* ปรับ CSS ให้รองรับ Sidebar */
         @media (min-width: 768px) {
-            body { padding-left: 250px; } /* เว้นที่ให้ Sidebar */
+            body { padding-left: 250px; } 
             .profile-card { margin-top: 0; }
         }
 
@@ -119,7 +149,6 @@ $avatar_url = !empty($user_data['avatar']) ? "uploads/profiles/" . $user_data['a
         h2 { margin: 0 0 5px 0; color: var(--primary); }
         p.role { color: #888; font-size: 14px; margin-bottom: 25px; }
 
-        /* Avatar styling */
         .avatar-wrapper {
             position: relative;
             width: 150px;
@@ -152,7 +181,6 @@ $avatar_url = !empty($user_data['avatar']) ? "uploads/profiles/" . $user_data['a
         }
         .camera-icon:hover { transform: scale(1.1); background: var(--secondary); }
 
-        /* Form elements */
         input[type="file"] { display: none; }
         
         .info-group { text-align: left; margin-bottom: 15px; }
@@ -187,11 +215,12 @@ $avatar_url = !empty($user_data['avatar']) ? "uploads/profiles/" . $user_data['a
         .alert { padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; }
         .success { background: #d4edda; color: #155724; }
         .error { background: #f8d7da; color: #721c24; }
-
     </style>
 </head>
 <body>
-<?php include 'sidebar.php'; ?>
+    
+    <?php include 'sidebar.php'; ?>
+    
     <div class="profile-card">
         <a href="<?php echo ($role == 'manager') ? 'Dashboard.php' : 'StaffHistory.php'; ?>" class="back-btn">
             <i class="fas fa-arrow-left"></i> กลับ
@@ -208,17 +237,17 @@ $avatar_url = !empty($user_data['avatar']) ? "uploads/profiles/" . $user_data['a
                 <input type="file" name="profile_img" id="fileInput" accept="image/*" onchange="previewImage(event)">
             </div>
 
-            <h2><?php echo $user_data['fullname']; ?></h2>
+            <h2><?php echo htmlspecialchars($user_data['fullname']); ?></h2>
             <p class="role"><?php echo strtoupper($user_data['role']); ?></p>
 
             <div class="info-group">
                 <label>ชื่อผู้ใช้ (Username)</label>
-                <input type="text" value="<?php echo $user_data['username']; ?>" readonly>
+                <input type="text" value="<?php echo htmlspecialchars($user_data['username']); ?>" readonly>
             </div>
 
             <div class="info-group">
                 <label>ชื่อ-นามสกุล</label>
-                <input type="text" value="<?php echo $user_data['fullname']; ?>" readonly>
+                <input type="text" value="<?php echo htmlspecialchars($user_data['fullname']); ?>" readonly>
             </div>
 
             <button type="submit" class="btn-save">บันทึกรูปโปรไฟล์</button>
@@ -226,14 +255,15 @@ $avatar_url = !empty($user_data['avatar']) ? "uploads/profiles/" . $user_data['a
     </div>
 
     <script>
-        // ฟังก์ชันแสดงตัวอย่างรูปก่อนอัปโหลด
         function previewImage(event) {
             var reader = new FileReader();
             reader.onload = function(){
                 var output = document.getElementById('preview');
                 output.src = reader.result;
             };
-            reader.readAsDataURL(event.target.files[0]);
+            if(event.target.files[0]) {
+                reader.readAsDataURL(event.target.files[0]);
+            }
         }
     </script>
 
