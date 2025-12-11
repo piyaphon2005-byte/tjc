@@ -2,7 +2,7 @@
 // db_connect.php
 $servername = "gateway01.ap-southeast-1.prod.aws.tidbcloud.com";
 $username = "2zJFS48pitnR2QG.root"; 
-$password = "vSreP8xciwOBfPf6"; // <<< เปลี่ยนตรงนี้เป็นรหัสผ่านจริง
+$password = "DF43GROp1tGLs8Gp"; // <<< เปลี่ยนตรงนี้เป็นรหัสผ่านจริง
 $dbname = "tjc_db"; 
 $port = 4000; // Port สำหรับ TiDB
 
