@@ -38,5 +38,4 @@ if (!$connected) {
 // 5. ตั้งค่าภาษาไทย
 $conn->set_charset("utf8");
 
-echo "เชื่อมต่อฐานข้อมูล TiDB สำเร็จ!";
 ?>
