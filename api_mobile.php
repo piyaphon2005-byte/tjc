@@ -164,11 +164,11 @@ else if ($action == 'get_dashboard_stats') {
 }
 
 // ==========================================
-// 4. SUBMIT REPORT (บันทึกรายงาน - แก้ไขแบบปลอดภัย)
+// 4. SUBMIT REPORT (บันทึกรายงาน - แก้ไขแล้ว ✅)
 // ==========================================
 else if ($action == 'submit_report') {
     
-    // 1. รับค่าแบบ Safe Mode (ถ้าแอปไม่ส่งมา ให้ใส่ค่าว่างแทน)
+    // 1. รับค่าแบบ Safe Mode
     $report_date = isset($_POST['report_date']) ? $_POST['report_date'] : date('Y-m-d H:i:s');
     $reporter_name = isset($_POST['reporter_name']) ? $_POST['reporter_name'] : '';
     $work_type = isset($_POST['work_type']) ? $_POST['work_type'] : '';
@@ -189,19 +189,18 @@ else if ($action == 'submit_report') {
     $additional_notes = isset($_POST['additional_notes']) ? $_POST['additional_notes'] : '';
     
     $job_status = isset($_POST['job_status']) ? $_POST['job_status'] : '';
-    // ถ้า next_appointment ส่งมาว่างๆ ให้เป็น NULL
     $next_appointment = (!empty($_POST['next_appointment']) && $_POST['next_appointment'] != 'null') ? $_POST['next_appointment'] : NULL;
     
     $activity_type = isset($_POST['activity_type']) ? $_POST['activity_type'] : '';
     $activity_detail = isset($_POST['activity_detail']) ? $_POST['activity_detail'] : '';
 
-    // รับค่าตัวเลข (กัน Error)
+    // รับค่าตัวเลข
     $fuel = isset($_POST['fuel_cost']) ? floatval($_POST['fuel_cost']) : 0.00;
     $acc = isset($_POST['accommodation_cost']) ? floatval($_POST['accommodation_cost']) : 0.00;
     $other = isset($_POST['other_cost']) ? floatval($_POST['other_cost']) : 0.00;
     $total = $fuel + $acc + $other;
     
-    // รับค่าข้อความส่วนท้าย (ตัวปัญหาที่มักทำให้ Error)
+    // รับค่าข้อความ
     $other_cost_detail = isset($_POST['other_cost_detail']) ? $_POST['other_cost_detail'] : '';
     $problem = isset($_POST['problem']) ? $_POST['problem'] : '';
     $suggestion = isset($_POST['suggestion']) ? $_POST['suggestion'] : '';
@@ -234,9 +233,10 @@ else if ($action == 'submit_report') {
 
     // เช็คว่า Prepare ผ่านไหม
     if ($stmt = $conn->prepare($sql)) {
-        // Bind Params (24 ตัว)
-        // สังเกตว่าผมเอาตัวแปรที่รับค่ามาใส่แทน $_POST ตรงๆ เพื่อความชัวร์
-        $stmt->bind_param("ssssssssssssssdsdsdssdss", 
+        // ✅ แก้ไข Type: s=String, d=Double
+        // other_cost_detail (ตำแหน่ง 21) -> s
+        // total_expense (ตำแหน่ง 22) -> d
+        $stmt->bind_param("ssssssssssssssdsdsdssdds", 
             $report_date, $reporter_name, $area, $province, $gps, $gps_address, 
             $work_result, $customer_type, $project_name, $additional_notes, $job_status, $next_appointment, $activity_type, $activity_detail,
             $fuel, $fuel_receipt, $acc, $acc_receipt, 
@@ -247,7 +247,6 @@ else if ($action == 'submit_report') {
         if ($stmt->execute()) {
             echo json_encode(["status" => "success", "message" => "บันทึกข้อมูลเรียบร้อย"]);
         } else {
-            // ส่ง Error ของ SQL กลับไปดูด้วย (เช่น Data too long)
             echo json_encode(["status" => "error", "message" => "Execute Failed: " . $stmt->error]);
         }
         $stmt->close();
