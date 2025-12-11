@@ -4,19 +4,32 @@ header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Methods: POST, GET");
 header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 
-// ตั้งค่าฐานข้อมูล
-$servername = "127.0.0.1";
-$username = "root"; 
-$password = "";
+// ตั้งค่าฐานข้อมูล (ใช้ TiDB Cloud Credentials + SSL Logic)
+$servername = "gateway01.ap-southeast-1.prod.aws.tidbcloud.com";
+$username = "2zJFS48pitnR2QG.root"; 
+$password = "DF43GROp1tGLs8Gp"; // <<< รหัสผ่านจริงของคุณ
 $dbname = "tjc_db";
+$port = 4000; // Port สำหรับ TiDB
 
-$conn = new mysqli($servername, $username, $password, $dbname);
-$conn->set_charset("utf8");
-
-if ($conn->connect_error) {
-    echo json_encode(["status" => "error", "message" => "Connection failed: " . $conn->connect_error]);
+// 1. สร้างการเชื่อมต่อและเปิดใช้งาน SSL/TLS
+$conn = mysqli_init();
+if (!$conn) {
+    echo json_encode(["status" => "error", "message" => "Connection failed: mysqli_init() error"]);
     exit();
 }
+
+// 2. ตั้งค่าไม่ตรวจสอบใบรับรอง (ใช้เลข 25 แทน)
+mysqli_options($conn, 25, false);
+// 3. เชื่อมต่อโดยบังคับใช้ SSL/TLS
+mysqli_real_connect($conn, $servername, $username, $password, $dbname, $port, NULL, MYSQLI_CLIENT_SSL);
+
+// เช็คว่าเชื่อมต่อล้มเหลวหรือไม่
+if (mysqli_connect_errno()) {
+    echo json_encode(["status" => "error", "message" => "Connection failed: " . mysqli_connect_error()]);
+    exit();
+}
+
+$conn->set_charset("utf8");
 
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 
@@ -49,8 +62,8 @@ if ($action == 'login') {
             // Role อื่นๆ ดึงตามจริงจากตาราง permissions
             // ต้อง JOIN 2 ตาราง: permissions (จับคู่สิทธิ์) และ master_pages (ชื่อไฟล์)
             $sql_perm = "SELECT mp.page_name, mp.file_name FROM permissions p 
-                         JOIN master_pages mp ON p.page_id = mp.id 
-                         WHERE p.role_name = '$role'";
+                          JOIN master_pages mp ON p.page_id = mp.id 
+                          WHERE p.role_name = '$role'";
             $res_perm = $conn->query($sql_perm);
             
             while($perm = $res_perm->fetch_assoc()) {
@@ -66,7 +79,7 @@ if ($action == 'login') {
             "fullname" => $row['fullname'],
             "role" => $role,
             "avatar" => $row['avatar'],
-            "allowed_pages" => $allowed_pages // ✅ ตัวสำคัญ! ส่งสิทธิ์ไปด้วย
+            "allowed_pages" => $allowed_pages 
         ]);
         
     } else {
@@ -134,7 +147,7 @@ else if ($action == 'get_dashboard_stats') {
     echo json_encode([
         "summary" => [
             "total" => $summary['total'] ?? 0,
-            "expense" => $summary['expense'] ?? 0   
+            "expense" => $summary['expense'] ?? 0    
         ],
         "breakdown" => $breakdown, // ส่งรายการสถานะแบบ Dynamic กลับไป
         "recent" => $recent
@@ -255,6 +268,7 @@ else if ($action == 'get_history') {
 
     echo json_encode(["summary" => $data, "history" => $history]);
 }
+
 // ==========================================
 // 6. GET MAP DATA (Final Ultimate Fix)
 // ==========================================
@@ -280,11 +294,11 @@ else if ($action == 'get_map_data') {
     }
 
     $sql = "SELECT r.*, u.avatar, u.role 
-            FROM reports r 
-            LEFT JOIN users u ON r.reporter_name = u.fullname 
-            $where 
-            ORDER BY r.report_date DESC";
-            
+             FROM reports r 
+             LEFT JOIN users u ON r.reporter_name = u.fullname 
+             $where 
+             ORDER BY r.report_date DESC";
+             
     $result = $conn->query($sql);
     
     $locations = [];

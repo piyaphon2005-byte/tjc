@@ -1,8 +1,41 @@
 <?php
 session_start();
-require_once 'db_connect.php';
-$conn = new mysqli($servername, $username, $password, $dbname);
+
+// --- ส่วนการเชื่อมต่อฐานข้อมูล TiDB (แก้ไขแล้ว) ---
+$servername = "gateway01.ap-southeast-1.prod.aws.tidbcloud.com";
+$username = "2zJFS48pitnR2QG.root";
+$password = "DF43GROp1tGLs8Gp"; 
+$dbname = "tjc_db";
+$port = 4000;
+
+// 1. เริ่มต้น mysqli object
+$conn = mysqli_init();
+if (!$conn) {
+    die("Connection failed: mysqli_init() error");
+}
+
+// 2. ตั้งค่า SSL (จำเป็นสำหรับ TiDB)
+mysqli_options($conn, MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, true);
+
+// 3. เชื่อมต่อด้วย MYSQLI_CLIENT_SSL
+$connected = mysqli_real_connect(
+    $conn, 
+    $servername, 
+    $username, 
+    $password, 
+    $dbname, 
+    $port, 
+    NULL, 
+    MYSQLI_CLIENT_SSL
+);
+
+if (!$connected) {
+    // ถ้าเชื่อมต่อไม่ได้ ให้หยุดและแจ้ง error
+    die("Database Connection Error: " . mysqli_connect_error());
+}
+
 $conn->set_charset("utf8");
+// --- จบส่วนการเชื่อมต่อ ---
 
 $error = ''; 
 
@@ -10,30 +43,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $username = $_POST['username'];
     $password = $_POST['password'];
 
+    // SQL Query
     $sql = "SELECT id, fullname, role, avatar FROM users WHERE username = ? AND password = ?";
     
-    if ($conn->connect_error) {
-        $error = "Database connection failed.";
-    } else {
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ss", $username, $password);
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        if ($result->num_rows > 0) {
-            $row = $result->fetch_assoc();
-            $_SESSION['user_id'] = $row['id'];
-            $_SESSION['fullname'] = $row['fullname'];
-            $_SESSION['role'] = $row['role'];
-            $_SESSION['avatar'] = $row['avatar'];
-
-            // ✅ แก้ไขตรงนี้: ส่งทุกคนไปหน้า "เมนูหลัก" (Main.php)
-            header("Location: Main.php");
-            exit();
-        } else {
-            $error = "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";
-        }
+    // เตรียม Statement
+    $stmt = $conn->prepare($sql);
+    if ($stmt === false) {
+        // เช็คเผื่อ SQL ผิดพลาด
+        die("Prepare failed: " . $conn->error);
     }
+
+    $stmt->bind_param("ss", $username, $password);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        $_SESSION['user_id'] = $row['id'];
+        $_SESSION['fullname'] = $row['fullname'];
+        $_SESSION['role'] = $row['role'];
+        $_SESSION['avatar'] = $row['avatar'];
+
+        // ส่งไปหน้า Main.php
+        header("Location: Main.php");
+        exit();
+    } else {
+        $error = "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";
+    }
+
+    $stmt->close();
     $conn->close();
 }
 ?>

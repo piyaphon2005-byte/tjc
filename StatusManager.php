@@ -4,7 +4,6 @@ require_once 'auth.php'; // ตรวจสอบการล็อกอิน
 
 // เชื่อมต่อฐานข้อมูล
 require_once 'db_connect.php';
-$conn = new mysqli($servername, $username, $password, $dbname);
 $conn->set_charset("utf8");
 
 $status_message = "";

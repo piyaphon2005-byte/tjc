@@ -1,16 +1,49 @@
 <?php
 session_start();
 require_once 'auth.php';
+
 // 1. ตรวจสอบสิทธิ์
-if (!isset($_SESSION['fullname'])) { header("Location: login.php"); exit(); }
+if (!isset($_SESSION['fullname'])) { 
+    header("Location: login.php"); 
+    exit(); 
+}
 
+// ============================================
+// 2. เชื่อมต่อฐานข้อมูล (แก้ไขให้รองรับ TiDB SSL)
+// ============================================
+$servername = "gateway01.ap-southeast-1.prod.aws.tidbcloud.com";
+$username = "2zJFS48pitnR2QG.root";
+$password = "DF43GROp1tGLs8Gp"; 
+$dbname = "tjc_db";
+$port = 4000;
 
-// 2. เชื่อมต่อฐานข้อมูล
-require_once 'db_connect.php';
-$conn = new mysqli($servername, $username, $password, $dbname);
+// เริ่มต้น mysqli object
+$conn = mysqli_init();
+if (!$conn) {
+    die("Connection failed: mysqli_init() error");
+}
+
+// ตั้งค่า SSL (สำคัญมากสำหรับ TiDB)
+mysqli_options($conn, MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, true);
+
+// เชื่อมต่อโดยใช้ Real Connect + SSL Flag
+$connected = mysqli_real_connect(
+    $conn, 
+    $servername, 
+    $username, 
+    $password, 
+    $dbname, 
+    $port, 
+    NULL, 
+    MYSQLI_CLIENT_SSL
+);
+
+if (!$connected) {
+    die("Connection failed: " . mysqli_connect_error());
+}
+
+// ตั้งค่าภาษาไทย
 $conn->set_charset("utf8");
-
-if ($conn->connect_error) { die("Connection failed: " . $conn->connect_error); }
 
 // ============================================
 // ส่วนที่ 1: ตัวกรอง (Filter)
@@ -44,20 +77,21 @@ $palette = ['#9b59b6', '#e67e22', '#1abc9c', '#34495e', '#7f8c8d', '#c0392b'];
 $palette_index = 0;
 $status_config = [];
 
-while($row = $res_master->fetch_assoc()) {
-    $name = $row['status_name'];
-    if (array_key_exists($name, $fixed_colors)) {
-        $status_config[$name] = $fixed_colors[$name];
-    } else {
-        $status_config[$name] = $palette[$palette_index % count($palette)];
-        $palette_index++;
+if ($res_master) {
+    while($row = $res_master->fetch_assoc()) {
+        $name = $row['status_name'];
+        if (array_key_exists($name, $fixed_colors)) {
+            $status_config[$name] = $fixed_colors[$name];
+        } else {
+            $status_config[$name] = $palette[$palette_index % count($palette)];
+            $palette_index++;
+        }
     }
 }
 
 // ============================================
 // ส่วนที่ 3: ดึงข้อมูล Report (เพิ่ม total_expense)
 // ============================================
-// ✅ เพิ่ม r.total_expense ใน SQL
 $sql = "SELECT r.id, r.reporter_name, r.project_name, r.work_result, r.job_status, r.gps, r.report_date, r.total_expense,
                u.avatar 
         FROM reports r 
@@ -149,7 +183,7 @@ if ($result && $result->num_rows > 0) {
             <select name="filter_name">
                 <option value="">-- พนักงานทั้งหมด --</option>
                 <?php 
-                if ($result_users->num_rows > 0) {
+                if ($result_users && $result_users->num_rows > 0) {
                     while($user = $result_users->fetch_assoc()) {
                         $selected = ($filter_name == $user['reporter_name']) ? 'selected' : '';
                         echo "<option value='".$user['reporter_name']."' $selected>".$user['reporter_name']."</option>";
