@@ -13,26 +13,45 @@ $message = "";
 // 1. เรียกใช้ไฟล์เชื่อมต่อฐานข้อมูล
 require_once 'db_connect.php';
 
-// ฟังก์ชันอัปโหลดรูปใบเสร็จ
+// ==========================================
+// ✅ ฟังก์ชันอัปโหลดรูป (แก้ไขใหม่ แก้ Permission Denied)
+// ==========================================
 function uploadReceipt($fileInputName) {
+    // ตรวจสอบว่ามีการส่งไฟล์มาจริงไหม
     if (isset($_FILES[$fileInputName]) && $_FILES[$fileInputName]['error'] == 0) {
-        $target_dir = "uploads/";
-        if (!file_exists($target_dir)) { mkdir($target_dir, 0777, true); }
         
+        // 1. ระบุที่อยู่โฟลเดอร์แบบ "เต็ม" (Absolute Path) เพื่อกัน Server หลงทาง
+        // __DIR__ จะดึง path จริงของไฟล์นี้ออกมา ไม่ว่าจะอยู่ C:\xampp หรือ /var/www
+        $target_dir = __DIR__ . "/uploads/";
+
+        // 2. ถ้ายังไม่มีโฟลเดอร์ ให้สร้างใหม่ (เปิดสิทธิ์ 0777)
+        if (!file_exists($target_dir)) { 
+            @mkdir($target_dir, 0777, true); 
+        }
+        
+        // 3. 💥 คำสั่งสำคัญ: สั่งปลดล็อกโฟลเดอร์ซ้ำอีกที (เพื่อให้ PHP เขียนไฟล์ได้ชัวร์ๆ บน Linux)
+        @chmod($target_dir, 0777);
+        
+        // ตั้งชื่อไฟล์ใหม่ (กันชื่อซ้ำ)
         $fileExtension = pathinfo($_FILES[$fileInputName]["name"], PATHINFO_EXTENSION);
         $newFileName = "receipt_" . time() . "_" . rand(100, 999) . "." . $fileExtension;
+        
+        // ระบุปลายทางไฟล์แบบเต็ม
         $target_file = $target_dir . $newFileName;
         
+        // 4. ย้ายไฟล์จาก Temp ไปยังโฟลเดอร์จริง
         if (move_uploaded_file($_FILES[$fileInputName]["tmp_name"], $target_file)) {
-            return $newFileName;
+            return $newFileName; // ส่งชื่อไฟล์กลับไปบันทึกใน DB
         }
     }
-    return "";
+    return ""; // ถ้าไม่มีไฟล์ หรืออัปโหลดไม่ผ่าน ให้คืนค่าว่าง
 }
 
+// ==========================================
 // ส่วนบันทึกข้อมูลเมื่อกด Submit
+// ==========================================
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // 1. ข้อมูลทั่วไป
+    // 1. รับค่าข้อมูลทั่วไป
     $report_date = $_POST['report_date'];
     $reporter_name = $_SESSION['fullname']; 
     $work_type = $_POST['work_type']; 
@@ -45,15 +64,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     } else {
         $area = isset($_POST['area_zone']) ? $_POST['area_zone'] : 'ไม่ได้ระบุโซน';
         $province = isset($_POST['province']) ? $_POST['province'] : '';
-        $gps = $_POST['gps'];
+        $gps = isset($_POST['gps']) ? $_POST['gps'] : '';
         $gps_address = isset($_POST['gps_address']) ? $_POST['gps_address'] : '';
     }
 
     // 2. ข้อมูลงาน
     $work_result = $_POST['work_result'];
     $customer_type = isset($_POST['customer_type']) ? $_POST['customer_type'] : '';
-    $project_name = $_POST['project_name'];
-    $additional_notes = $_POST['additional_notes']; 
+    $project_name = isset($_POST['project_name']) ? $_POST['project_name'] : '';
+    $additional_notes = isset($_POST['additional_notes']) ? $_POST['additional_notes'] : ''; 
     
     $job_status = $_POST['job_status']; 
     $next_appointment = !empty($_POST['next_appointment']) ? $_POST['next_appointment'] : NULL;
@@ -62,18 +81,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $activity_detail = isset($_POST['activity_detail']) ? $_POST['activity_detail'] : '';
 
     // 3. ข้อมูลเงิน
-    $fuel_cost = !empty($_POST['fuel_cost']) ? $_POST['fuel_cost'] : 0;
-    $accommodation_cost = !empty($_POST['accommodation_cost']) ? $_POST['accommodation_cost'] : 0;
-    $other_cost = !empty($_POST['other_cost']) ? $_POST['other_cost'] : 0;
+    $fuel_cost = !empty($_POST['fuel_cost']) ? floatval($_POST['fuel_cost']) : 0;
+    $accommodation_cost = !empty($_POST['accommodation_cost']) ? floatval($_POST['accommodation_cost']) : 0;
+    $other_cost = !empty($_POST['other_cost']) ? floatval($_POST['other_cost']) : 0;
     $other_cost_detail = isset($_POST['other_cost_detail']) ? $_POST['other_cost_detail'] : '';
     
+    // เรียกฟังก์ชันอัปโหลด (ที่แก้แล้วด้านบน)
     $fuel_receipt = uploadReceipt('fuel_receipt_file');
     $accommodation_receipt = uploadReceipt('accommodation_receipt_file');
     $other_receipt = uploadReceipt('other_receipt_file');
 
     $total_expense = $fuel_cost + $accommodation_cost + $other_cost;
-    $problem = $_POST['problem'];
-    $suggestion = $_POST['suggestion'];
+    
+    $problem = isset($_POST['problem']) ? $_POST['problem'] : '';
+    $suggestion = isset($_POST['suggestion']) ? $_POST['suggestion'] : '';
 
     // เตรียม SQL
     $sql = "INSERT INTO reports (
@@ -94,6 +115,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         );
 
         if ($stmt->execute()) { 
+            // บันทึกสำเร็จ -> ไปหน้าประวัติ
             header("Location: StaffHistory.php");
             exit();
         } else { 
@@ -303,24 +325,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         const provinceSelect = document.getElementById("provinceSelect");
         const selectedArea = areaSelect.value;
 
-        // เคลียร์ค่าเดิมก่อน
         provinceSelect.innerHTML = '';
 
-        // ✅ เช็คพิเศษ: ถ้าเลือก "เฉพาะ จ.อุบลราชธานี"
         if (selectedArea === 'อุบลราชธานี') {
             let option = document.createElement("option");
             option.value = 'อุบลราชธานี';
             option.text = 'อุบลราชธานี';
-            option.selected = true; // สั่งให้เลือกทันที
+            option.selected = true; 
             provinceSelect.appendChild(option);
-            return; // จบการทำงานฟังก์ชันนี้เลย ไม่ต้องไปโหลด API
+            return; 
         }
 
-        // ถ้าเป็นภาคอื่นๆ ให้โหลดตามปกติ
         provinceSelect.innerHTML = '<option value="">กำลังโหลด...</option>';
         
         if (selectedArea) {
             try {
+                // แก้ให้เรียก path ให้ถูก (เผื่ออยู่คนละ folder)
                 const response = await fetch('api_data.php?action=get_provinces&region=' + selectedArea);
                 const provinces = await response.json();
                 
@@ -396,21 +416,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         else { group.style.display = "none"; input.value = ""; calculateTotal(); }
     }
     
-    // ✅ จุดที่แก้ไข: สั่งซ่อน/แสดง กล่องกิจกรรม ตามโหมดที่เลือก
     function toggleWorkMode(mode) {
         var outsideDiv = document.getElementById("outsideOptions");
-        var activitySection = document.getElementById("activitySection"); // รับค่าจาก ID ใหม่ที่เราสร้าง
+        var activitySection = document.getElementById("activitySection"); 
 
         if (mode === 'outside') { 
-            // กรณีเลือก นอกสถานที่
             outsideDiv.style.display = "block"; 
-            if(activitySection) activitySection.style.display = "none"; // ซ่อนกิจกรรม
+            if(activitySection) activitySection.style.display = "none"; 
         } else { 
-            // กรณีเลือก เข้าบริษัท
             outsideDiv.style.display = "none"; 
-            if(activitySection) activitySection.style.display = "block"; // แสดงกิจกรรม
-            
-            // เคลียร์ค่าพิกัด
+            if(activitySection) activitySection.style.display = "block"; 
             document.getElementById("gpsInput").value = ""; 
             document.getElementById("addressInput").value = "";
         }

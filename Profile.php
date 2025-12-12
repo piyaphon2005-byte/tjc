@@ -14,7 +14,7 @@ $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role']; // ใช้ role จาก session
 
 // ============================================
-// 2. เชื่อมต่อฐานข้อมูล (แบบ TiDB Cloud SSL) ✅ แก้ไขใหม่
+// 2. เชื่อมต่อฐานข้อมูล (แบบ TiDB Cloud SSL)
 // ============================================
 $servername = "gateway01.ap-southeast-1.prod.aws.tidbcloud.com";
 $username_db = "2zJFS48pitnR2QG.root"; 
@@ -42,11 +42,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['profile_img'])) {
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         
         if (in_array($ext, $allowed)) {
-            // สร้างโฟลเดอร์เก็บรูปถ้ายังไม่มี
-            $target_dir = "uploads/profiles/";
-        if (!file_exists($target_dir)) { 
-            mkdir($target_dir, 0777, true); // <--- นี่คือคำสั่งวิเศษ!
-        }
+            
+            // ✅ แก้ไขส่วนนี้: ใช้ Path เต็ม และ ปลดล็อก Permission
+            $target_dir = __DIR__ . "/uploads/profiles/";
+            
+            // ถ้าไม่มีโฟลเดอร์ ให้สร้างใหม่
+            if (!file_exists($target_dir)) { 
+                @mkdir($target_dir, 0777, true); 
+            }
+            
+            // 💥 สั่งปลดล็อกโฟลเดอร์ซ้ำ (สำคัญมากสำหรับ Render)
+            @chmod($target_dir, 0777);
             
             // ตั้งชื่อไฟล์ใหม่กันซ้ำ (user_id_timestamp.jpg)
             $new_name = "user_" . $user_id . "_" . time() . "." . $ext;
@@ -94,7 +100,8 @@ $user_data = $result_user->fetch_assoc();
 // หารูปโปรไฟล์ (ถ้าไม่มีใช้รูป Default)
 // ใช้ time() ต่อท้ายเพื่อป้องกัน Browser จำรูปเก่า (Cache)
 $avatar_path = "uploads/profiles/" . $user_data['avatar'];
-if (!empty($user_data['avatar']) && file_exists($avatar_path)) {
+// เช็คไฟล์จริงโดยใช้ path เต็ม เพื่อความชัวร์
+if (!empty($user_data['avatar']) && file_exists(__DIR__ . "/" . $avatar_path)) {
     $avatar_url = $avatar_path . "?t=" . time(); 
 } else {
     $avatar_url = "https://via.placeholder.com/150?text=USER";
@@ -213,8 +220,8 @@ if (!empty($user_data['avatar']) && file_exists($avatar_path)) {
         .btn-save:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(78, 84, 200, 0.4); }
 
         .alert { padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; }
-        .success { background: #d4edda; color: #155724; }
-        .error { background: #f8d7da; color: #721c24; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     </style>
 </head>
 <body>
