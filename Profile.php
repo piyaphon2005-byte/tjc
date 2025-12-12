@@ -44,9 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['profile_img'])) {
         if (in_array($ext, $allowed)) {
             // สร้างโฟลเดอร์เก็บรูปถ้ายังไม่มี
             $target_dir = "uploads/profiles/";
-            if (!file_exists($target_dir)) { 
-                mkdir($target_dir, 0777, true); 
-            }
+        if (!file_exists($target_dir)) { 
+            mkdir($target_dir, 0777, true); // <--- นี่คือคำสั่งวิเศษ!
+        }
             
             // ตั้งชื่อไฟล์ใหม่กันซ้ำ (user_id_timestamp.jpg)
             $new_name = "user_" . $user_id . "_" . time() . "." . $ext;
